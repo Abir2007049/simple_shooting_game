@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro Neon Space Shooter</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #050510;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #ui {
+            font-size: 20px;
+            margin-bottom: 15px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            background: rgba(255, 255, 255, 0.03);
+            padding: 10px 30px;
+            border-radius: 50px;
+            border: 1px solid rgba(0, 255, 204, 0.2);
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.1);
+        }
+        #score {
+            color: #00ffcc;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(0, 255, 204, 0.5);
+        }
+        canvas {
+            border: 4px solid #1a1a3a;
+            border-radius: 8px;
+            background: radial-gradient(circle, #09091e 0%, #03030d 100%);
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.15);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui">Score: <span id="score">0</span></div>
+    <canvas id="gameCanvas" width="400" height="500"></canvas>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const scoreEl = document.getElementById("score");
+
+// Game State Variables
+let score = 0;
+let gameOver = false;
+let bullets = [];
+let enemies = [];
+let spawnTimeoutId = null;
+
+// Player Ship Config
+const player = {
+    x: canvas.width / 2 - 20,
+    y: canvas.height - 50,
+    w: 40,
+    h: 30,
+    speed: 6,
+    color: "#00ffcc"
+};
+
+// Track keyboard inputs
+const keys = {};
+window.addEventListener("keydown", (e) => keys[e.key] = true);
+window.addEventListener("keyup", (e) => keys[e.key] = false);
+
+// Shoot bullet on Spacebar, restart on R
+window.addEventListener("keydown", (e) => {
+    if (e.key === " " && !gameOver) {
+        bullets.push({ 
+            x: player.x + player.w / 2 - 2, 
+            y: player.y, 
+            w: 4, 
+            h: 12, 
+            speed: 9 
+        });
+    }
+    if (e.key === "r" && gameOver) {
+        resetGame();
+    }
+});
+
+// Spawn Enemy every 1 second
+function spawnEnemy() {
+    if (gameOver) return;
+    const size = Math.random() * 15 + 20; // 20 to 35 px wide
+    enemies.push({
+        x: Math.random() * (canvas.width - size),
+        y: -size,
+        w: size,
+        h: size,
+        speed: Math.random() * 1.5 + 1.5,
+        color: "#ff3366"
+    });
+    spawnTimeoutId = setTimeout(spawnEnemy, 1000);
+}
+
+// Reset Game State completely
+function resetGame() {
+    score = 0;
+    gameOver = false;
+    bullets = [];
+    enemies = [];
+    player.x = canvas.width / 2 - 20;
+    scoreEl.innerText = score;
+    clearTimeout(spawnTimeoutId);
+    spawnEnemy();
+    gameLoop();
+}
+
+// Axis-Aligned Bounding Box (AABB) Collision Detection
+function isColliding(rect1, rect2) {
+    return rect1.x < rect2.x + rect2.w &&
+           rect1.x + rect1.w > rect2.x &&
+           rect1.y < rect2.y + rect2.h &&
+           rect1.y + rect1.h > rect2.y;
+}
+
+// Main Game Loop
+function gameLoop() {
+    if (gameOver) {
+        ctx.fillStyle = "rgba(3, 3, 13, 0.85)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = "#ff3366";
+        ctx.fillStyle = "#ff3366";
+        ctx.font = "bold 36px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 20);
+        
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "16px sans-serif";
+        ctx.fillText("Press 'R' to Deploy Again", canvas.width / 2, canvas.height / 2 + 30);
+        return;
+    }
+
+    // Clear canvas frame
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 1. Move Player
+    if ((keys["ArrowLeft"] || keys["a"]) && player.x > 0) player.x -= player.speed;
+    if ((keys["ArrowRight"] || keys["d"]) && player.x < canvas.width - player.w) player.x += player.speed;
+
+    // --- DRAW DETAILED PLAYER AIRCRAFT ---
+    ctx.save();
+    // Fire Thruster Flame Effect
+    ctx.shadowBlur = Math.random() * 10 + 10;
+    ctx.shadowColor = "#ff9900";
+    ctx.fillStyle = Math.random() > 0.5 ? "#ffaa00" : "#ff3300";
+    ctx.beginPath();
+    ctx.moveTo(player.x + player.w / 2 - 4, player.y + player.h);
+    ctx.lineTo(player.x + player.w / 2, player.y + player.h + 12 + Math.random() * 6);
+    ctx.lineTo(player.x + player.w / 2 + 4, player.y + player.h);
+    ctx.fill();
+
+    // Main Ship Hull
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = player.color;
+    ctx.fillStyle = player.color;
+    ctx.beginPath();
+    ctx.moveTo(player.x + player.w / 2, player.y); // Nose cone
+    ctx.lineTo(player.x + player.w - 8, player.y + player.h); // Right back wing
+    ctx.lineTo(player.x + player.w / 2, player.y + player.h - 6); // Inner tail structural cutout
+    ctx.lineTo(player.x + 8, player.y + player.h); // Left back wing
+    ctx.closePath();
+    ctx.fill();
+
+    // Extra Details: Outboard Wings
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(player.x, player.y + player.h - 10, 4, 10); // Left wingtip stabilize
+    ctx.fillRect(player.x + player.w - 4, player.y + player.h - 10, 4, 10); // Right wingtip stabilize
+    ctx.restore();
+
+    // 2. Update & Draw Bullets
+    ctx.save();
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = "#ffff00";
+    ctx.fillStyle = "#ffff00";
+    for (let b = bullets.length - 1; b >= 0; b--) {
+        bullets[b].y -= bullets[b].speed;
+        
+        if (bullets[b].y < 0) {
+            bullets.splice(b, 1);
+            continue;
+        }
+        ctx.fillRect(bullets[b].x, bullets[b].y, bullets[b].w, bullets[b].h);
+    }
+    ctx.restore();
+
+    // 3. Update & Draw Enemies
+    for (let e = enemies.length - 1; e >= 0; e--) {
+        enemies[e].y += enemies[e].speed;
+        
+        if (enemies[e].y > canvas.height || isColliding(player, enemies[e])) {
+            gameOver = true;
+        }
+
+        // Check weapon intersections
+        for (let b = bullets.length - 1; b >= 0; b--) {
+            if (isColliding(bullets[b], enemies[e])) {
+                enemies.splice(e, 1);
+                bullets.splice(b, 1);
+                score += 10;
+                scoreEl.innerText = score;
+                break;
+            }
+        }
+
+        // --- DRAW DETAILED ALIEN DRONE ---
+        if (enemies[e]) {
+            const en = enemies[e];
+            ctx.save();
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = en.color;
+            ctx.fillStyle = en.color;
+
+            // Wing Pincers extending downward
+            ctx.beginPath();
+            ctx.moveTo(en.x, en.y);
+            ctx.lineTo(en.x + en.w, en.y);
+            ctx.lineTo(en.x + en.w - 4, en.y + en.h);
+            ctx.lineTo(en.x + en.w - 10, en.y + en.h - 8);
+            ctx.lineTo(en.x + 10, en.y + en.h - 8);
+            ctx.lineTo(en.x + 4, en.y + en.h);
+            ctx.closePath();
+            ctx.fill();
+
+            // Glowing engine core eye
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = "#ffffff";
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(en.x + en.w / 2, en.y + en.h / 3, en.w / 6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        }
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+// Initialize the game
+spawnEnemy();
+gameLoop();
+</script>
+</body>
+</html>
